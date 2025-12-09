@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
-  <title>GNSS DOP Heatmap – CelesTrak + satellite.js</title>
+  <title>GNSS DOP Heatmap – CelesTrak + satellite.js + TEC</title>
 
   <!-- Leaflet CSS -->
   <link
@@ -39,13 +39,21 @@
       background: rgba(5, 8, 22, 0.96);
       border-bottom: 1px solid rgba(255,255,255,0.1);
       display: grid;
-      grid-template-columns: 2.7fr 2.7fr 2fr 2fr;
+      grid-template-columns: 2.8fr 2.8fr 2.4fr 3fr;
       grid-gap: 10px;
-      align-items: center;
+      align-items: flex-start;
       z-index: 1000;
     }
 
     .toolbar-group {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      align-items: flex-start;
+      font-size: 11px;
+    }
+
+    .toolbar-row {
       display: flex;
       flex-wrap: wrap;
       gap: 6px 10px;
@@ -54,18 +62,26 @@
 
     .toolbar label {
       font-size: 11px;
-      opacity: 0.85;
+      opacity: 0.9;
       white-space: nowrap;
     }
 
     .toolbar input[type="number"],
-    .toolbar select {
+    .toolbar select,
+    .toolbar textarea {
       font-size: 11px;
       padding: 2px 4px;
       background: #0b1020;
       border: 1px solid rgba(255,255,255,0.2);
       border-radius: 4px;
       color: #f5f5f5;
+    }
+
+    .toolbar textarea {
+      width: 100%;
+      resize: vertical;
+      min-height: 40px;
+      max-height: 120px;
     }
 
     .toolbar input[type="color"] {
@@ -167,6 +183,14 @@
     .checkbox-row label span {
       margin-left: 2px;
     }
+
+    .chip {
+      padding: 1px 6px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.2);
+      font-size: 10px;
+      opacity: 0.8;
+    }
   </style>
 </head>
 <body>
@@ -174,90 +198,135 @@
     <div class="toolbar">
       <!-- GNSS & DOP -->
       <div class="toolbar-group">
-        <div class="checkbox-row">
-          <label><input type="checkbox" class="sys-check" value="gps" checked><span>GPS</span></label>
-          <label><input type="checkbox" class="sys-check" value="galileo" checked><span>Galileo</span></label>
-          <label><input type="checkbox" class="sys-check" value="glonass" checked><span>GLONASS</span></label>
-          <label><input type="checkbox" class="sys-check" value="beidou" checked><span>BeiDou</span></label>
-          <label><input type="checkbox" class="sys-check" value="qzss" checked><span>QZSS</span></label>
+        <div class="toolbar-row">
+          <div class="checkbox-row">
+            <label><input type="checkbox" class="sys-check" value="gps" checked><span>GPS</span></label>
+            <label><input type="checkbox" class="sys-check" value="galileo" checked><span>Galileo</span></label>
+            <label><input type="checkbox" class="sys-check" value="glonass" checked><span>GLONASS</span></label>
+            <label><input type="checkbox" class="sys-check" value="beidou" checked><span>BeiDou</span></label>
+            <label><input type="checkbox" class="sys-check" value="qzss" checked><span>QZSS</span></label>
+          </div>
         </div>
-        <label>
-          DOP:
-          <select id="dopType">
-            <option value="GDOP">GDOP</option>
-            <option value="PDOP">PDOP</option>
-            <option value="HDOP">HDOP</option>
-            <option value="VDOP">VDOP</option>
-          </select>
-        </label>
-        <label>
-          仰角マスク(°):
-          <input id="elevMask" type="number" value="15" min="0" max="45" step="1" />
-        </label>
-        <label>
-          基準高度(km):
-          <input id="obsHeightKm" type="number" value="0" step="0.1" />
-        </label>
+        <div class="toolbar-row">
+          <label>
+            DOP:
+            <select id="dopType">
+              <option value="GDOP">GDOP</option>
+              <option value="PDOP">PDOP</option>
+              <option value="HDOP">HDOP</option>
+              <option value="VDOP">VDOP</option>
+            </select>
+          </label>
+          <label>
+            仰角マスク(°):
+            <input id="elevMask" type="number" value="15" min="0" max="45" step="1" />
+          </label>
+          <label>
+            基準高度(km):
+            <input id="obsHeightKm" type="number" value="0" step="0.1" />
+          </label>
+        </div>
       </div>
 
       <!-- 時間オフセット & フォーカス -->
       <div class="toolbar-group">
-        <label>
-          時間オフセット(h, -120〜+120):
-          <!-- ★ 10分刻み (1/6 h) に変更 -->
-          <input id="timeOffsetHours" type="range" min="-120" max="120" step="0.1666667" value="0" />
-        </label>
-        <span id="timeOffsetLabel" style="font-size:11px;min-width:90px;">Δt = 0.0 h</span>
-        <span id="utcTimeLabel" style="font-size:11px;white-space:nowrap;">UTC: -</span>
-        <button id="resetTime">Δt=0</button>
-        <label>
-          フォーカス:
-          <select id="focusRegion">
-            <option value="world">World</option>
-            <option value="japan">Japan</option>
-            <option value="us">USA</option>
-            <option value="europe">Europe</option>
-            <option value="australia">Australia</option>
-            <option value="southamerica">South America</option>
-            <option value="africa">Africa</option>
-          </select>
-        </label>
+        <div class="toolbar-row">
+          <label>
+            時間オフセット(h, -120〜+120):
+            <!-- 10分刻み (1/6 h) -->
+            <input id="timeOffsetHours" type="range" min="-120" max="120" step="0.1666667" value="0" />
+          </label>
+        </div>
+        <div class="toolbar-row">
+          <span id="timeOffsetLabel" style="font-size:11px;min-width:90px;">Δt = 0.0 h</span>
+          <span id="utcTimeLabel" style="font-size:11px;white-space:nowrap;">UTC: -</span>
+          <button id="resetTime">Δt=0</button>
+        </div>
+        <div class="toolbar-row">
+          <label>
+            フォーカス:
+            <select id="focusRegion">
+              <option value="world">World</option>
+              <option value="japan">Japan</option>
+              <option value="us">USA</option>
+              <option value="europe">Europe</option>
+              <option value="australia">Australia</option>
+              <option value="southamerica">South America</option>
+              <option value="africa">Africa</option>
+            </select>
+          </label>
+        </div>
       </div>
 
       <!-- カラーバー & 透明度 -->
       <div class="toolbar-group">
-        <label>
-          DOP min:
-          <input id="dopMin" type="number" value="0.5" step="0.1" />
-        </label>
-        <label>
-          DOP max:
-          <input id="dopMax" type="number" value="10" step="0.5" />
-        </label>
-        <label>
-          色(低):
-          <input id="colorLow" type="color" value="#22c55e" />
-        </label>
-        <label>
-          色(中):
-          <input id="colorMid" type="color" value="#eab308" />
-        </label>
-        <label>
-          色(高):
-          <input id="colorHigh" type="color" value="#ef4444" />
-        </label>
+        <div class="toolbar-row">
+          <label>
+            DOP min:
+            <input id="dopMin" type="number" value="0.5" step="0.1" />
+          </label>
+          <label>
+            DOP max:
+            <input id="dopMax" type="number" value="10" step="0.5" />
+          </label>
+        </div>
+        <div class="toolbar-row">
+          <label>
+            色(低):
+            <input id="colorLow" type="color" value="#22c55e" />
+          </label>
+          <label>
+            色(中):
+            <input id="colorMid" type="color" value="#eab308" />
+          </label>
+          <label>
+            色(高):
+            <input id="colorHigh" type="color" value="#ef4444" />
+          </label>
+        </div>
         <div class="colorbar-preview" id="colorbarPreview"></div>
+        <div class="toolbar-row">
+          <label>
+            ヒートマップ透明度:
+            <input id="alphaSlider" type="range" min="0.1" max="1" step="0.05" value="0.7" />
+          </label>
+          <span id="alphaLabel" style="font-size:11px;">α = 0.70</span>
+        </div>
+        <div class="toolbar-row">
+          <button id="reloadTle">TLE更新</button>
+          <button id="recalcBtn">再計算</button>
+        </div>
       </div>
 
-      <!-- 透明度 & 実行 -->
+      <!-- ★ TECU 予報入力 & DOP反映 -->
       <div class="toolbar-group">
-        <label>
-          ヒートマップ透明度:
-          <input id="alphaSlider" type="range" min="0.1" max="1" step="0.05" value="0.7" />
-        </label>
-        <span id="alphaLabel" style="font-size:11px;">α = 0.70</span>
-        <button id="reloadTle">TLE更新</button>
-        <button id="recalcBtn">再計算</button>
+        <div class="toolbar-row" style="justify-content:space-between;width:100%;">
+          <span class="chip">TECU予報インプット → DOP補正</span>
+        </div>
+        <div class="toolbar-row" style="width:100%;">
+          <textarea id="tecInput" placeholder="例: lat,lon,tec&#10;35,140,40&#10;40,140,60"></textarea>
+        </div>
+        <div class="toolbar-row">
+          <button id="loadTecBtn">TEC読み込み</button>
+          <label style="display:flex;align-items:center;gap:4px;">
+            <input type="checkbox" id="useTecCheckbox" />
+            <span>TEC反映</span>
+          </label>
+        </div>
+        <div class="toolbar-row">
+          <label>
+            TEC基準(TECU):
+            <input id="tecRef" type="number" value="20" step="1" style="width:60px;" />
+          </label>
+          <label title="(TEC-TEC基準)/TEC基準 × β">
+            β(感度):
+            <input id="tecBeta" type="number" value="0.5" step="0.1" style="width:60px;" />
+          </label>
+        </div>
+        <div class="toolbar-row" style="font-size:10px;opacity:0.8;max-width:260px;">
+          DOP補正式: DOP_eff = DOP_geom × (1 + β × (TEC − TEC基準) / TEC基準)<br/>
+          ※ 数式はあとで好きに調整してOK
+        </div>
       </div>
     </div>
 
@@ -303,7 +372,12 @@
     let dopLayer = null;
     let currentAlpha = 0.7;
 
-    const baseTime = new Date();  // ブラウザの「今」
+    // ★ TEC グリッド
+    // tecGrid = [{lat, lon, tec}, ...]
+    let tecGrid = [];
+    let tecLoaded = false;
+
+    const baseTime = new Date();
 
     const dopTypeSel   = document.getElementById("dopType");
     const elevMaskEl   = document.getElementById("elevMask");
@@ -327,6 +401,12 @@
     const dopTokyoLabel     = document.getElementById("dopTokyoLabel");
     const statusText  = document.getElementById("statusText");
     const sysChecks   = document.querySelectorAll(".sys-check");
+
+    const tecInputEl  = document.getElementById("tecInput");
+    const loadTecBtn  = document.getElementById("loadTecBtn");
+    const useTecCheckbox = document.getElementById("useTecCheckbox");
+    const tecRefEl    = document.getElementById("tecRef");
+    const tecBetaEl   = document.getElementById("tecBeta");
 
     const map = L.map("map", {
       worldCopyJump: true,
@@ -419,9 +499,9 @@
 
     updateTimeOffsetLabelAndUtc();
 
-    // ★ スライダー操作時はラベル更新のみ（再計算しない）
     timeOffsetEl.addEventListener("input", () => {
       updateTimeOffsetLabelAndUtc();
+      // 再計算はしない（重いので）
     });
 
     document.getElementById("resetTime").addEventListener("click", () => {
@@ -639,6 +719,93 @@
       return inv;
     }
 
+    // ====== TEC グリッド関連 ======
+
+    // TEC CSV をパース
+    function parseTecCsv(text) {
+      const lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
+      if (lines.length === 0) return [];
+
+      const result = [];
+      let startIdx = 0;
+
+      // 先頭行にヘッダらしき文字が含まれていたらスキップ
+      if (/[a-zA-Z]/.test(lines[0])) {
+        startIdx = 1;
+      }
+
+      for (let i = startIdx; i < lines.length; i++) {
+        const cols = lines[i].split(/[,\s]+/).map(c => c.trim());
+        if (cols.length < 3) continue;
+        const lat = parseFloat(cols[0]);
+        const lon = parseFloat(cols[1]);
+        const tec = parseFloat(cols[2]);
+        if (!isFinite(lat) || !isFinite(lon) || !isFinite(tec)) continue;
+        result.push({ lat, lon, tec });
+      }
+      return result;
+    }
+
+    // 指定地点に最も近い TEC を取得（単純Nearest Neighbor）
+    function getTecAt(latDeg, lonDeg) {
+      if (!tecLoaded || !tecGrid || tecGrid.length === 0) return null;
+
+      let best = null;
+      let bestDist2 = Infinity;
+      for (const p of tecGrid) {
+        const dLat = latDeg - p.lat;
+        let dLon = lonDeg - p.lon;
+        if (dLon > 180) dLon -= 360;
+        if (dLon < -180) dLon += 360;
+        const dist2 = dLat*dLat + dLon*dLon;
+        if (dist2 < bestDist2) {
+          bestDist2 = dist2;
+          best = p;
+        }
+      }
+      // TECデータからあまりに遠い場合は無効とする（しきい値は適当）
+      if (bestDist2 > 30*30) return null; // 30度以上離れていたら無視
+      return best.tec;
+    }
+
+    // DOP値にTEC補正をかける
+    function applyTecToDop(dopVal, latDeg, lonDeg) {
+      if (!useTecCheckbox.checked) return dopVal;
+      if (!tecLoaded) return dopVal;
+      if (dopVal == null || !isFinite(dopVal)) return dopVal;
+
+      const tec = getTecAt(latDeg, lonDeg);
+      if (tec == null || !isFinite(tec)) return dopVal;
+
+      const tecRef = parseFloat(tecRefEl.value) || 20;
+      const beta   = parseFloat(tecBetaEl.value) || 0.5;
+
+      const ratio = (tec - tecRef) / tecRef;
+      const factor = 1 + beta * ratio;
+
+      const limitedFactor = Math.max(0.3, Math.min(factor, 5.0));
+
+      return dopVal * limitedFactor;
+    }
+
+    loadTecBtn.addEventListener("click", () => {
+      const txt = tecInputEl.value.trim();
+      if (!txt) {
+        setStatus("TEC入力欄が空です。lat,lon,tec の形式で貼り付けてください。", true);
+        return;
+      }
+      const parsed = parseTecCsv(txt);
+      if (!parsed || parsed.length === 0) {
+        setStatus("TECデータのパースに失敗しました。形式を確認してください。", true);
+        return;
+      }
+      tecGrid = parsed;
+      tecLoaded = true;
+      setStatus(`TECデータを読み込みました（ポイント数: ${tecGrid.length}）。「TEC反映」にチェックを入れるとDOPに補正がかかります。`, false);
+    });
+
+    // ====== DOP計算 ======
+
     function computeDopAtLocation(latDeg, lonDeg, heightKm, time, elevMaskDeg) {
       if (!allSatellites || allSatellites.length === 0) {
         return { dops: {GDOP:null,PDOP:null,HDOP:null,VDOP:null}, visibleCount: 0 };
@@ -677,8 +844,8 @@
         G.push([eComp, nComp, uComp, 1.0]);
       }
 
-      const dops = computeDopsFromMatrix(G);
-      return { dops, visibleCount };
+      const dopsGeom = computeDopsFromMatrix(G);
+      return { dops: dopsGeom, visibleCount };
     }
 
     function recalcDopHeatmap() {
@@ -704,17 +871,24 @@
 
       dopLayer.clearLayers();
 
-      const tokyoRes = computeDopAtLocation(35.68, 139.76, obsHeightKm, time, elevMask);
-      const tokDops  = tokyoRes.dops;
-      visibleTokyoLabel.textContent = tokyoRes.visibleCount.toString();
-      if (tokDops.GDOP == null) {
+      // 東京のDOPを計算（TEC補正も適用）
+      const tokyoRaw = computeDopAtLocation(35.68, 139.76, obsHeightKm, time, elevMask);
+      const tokDopsGeom  = tokyoRaw.dops;
+      visibleTokyoLabel.textContent = tokyoRaw.visibleCount.toString();
+
+      if (tokDopsGeom.GDOP == null) {
         dopTokyoLabel.textContent = "–";
       } else {
+        const gEff = applyTecToDop(tokDopsGeom.GDOP, 35.68, 139.76);
+        const pEff = applyTecToDop(tokDopsGeom.PDOP, 35.68, 139.76);
+        const hEff = applyTecToDop(tokDopsGeom.HDOP, 35.68, 139.76);
+        const vEff = applyTecToDop(tokDopsGeom.VDOP, 35.68, 139.76);
+
         const txt = [
-          `G:${tokDops.GDOP.toFixed(1)}`,
-          `P:${tokDops.PDOP.toFixed(1)}`,
-          `H:${tokDops.HDOP.toFixed(1)}`,
-          `V:${tokDops.VDOP.toFixed(1)}`
+          `G:${gEff.toFixed(1)}`,
+          `P:${pEff.toFixed(1)}`,
+          `H:${hEff.toFixed(1)}`,
+          `V:${vEff.toFixed(1)}`
         ].join(" ");
         dopTokyoLabel.textContent = txt;
       }
@@ -725,8 +899,11 @@
           const centerLon = lon + LON_STEP / 2;
 
           const { dops } = computeDopAtLocation(centerLat, centerLon, obsHeightKm, time, elevMask);
-          const val = dops[dopType] || null;
+          let val = dops[dopType] || null;
           if (val == null || !isFinite(val)) continue;
+
+          // ★ TEC補正をDOPに反映
+          val = applyTecToDop(val, centerLat, centerLon);
 
           const color = colorForDop(val, dopMin, dopMax, lowC, midC, highC);
 
@@ -746,7 +923,7 @@
         }
       }
 
-      setStatus(`DOP計算完了 (Δt=${dtHours.toFixed(1)}h, 仰角≥${elevMask.toFixed(0)}°)。`, false);
+      setStatus(`DOP計算完了 (Δt=${dtHours.toFixed(1)}h, 仰角≥${elevMask.toFixed(0)}°, TEC反映:${useTecCheckbox.checked ? "ON" : "OFF"})。`, false);
     }
 
     recalcBtn.addEventListener("click", () => {
@@ -781,13 +958,18 @@
         return;
       }
 
+      const gEff = applyTecToDop(dops.GDOP, e.latlng.lat, e.latlng.lng);
+      const pEff = applyTecToDop(dops.PDOP, e.latlng.lat, e.latlng.lng);
+      const hEff = applyTecToDop(dops.HDOP, e.latlng.lat, e.latlng.lng);
+      const vEff = applyTecToDop(dops.VDOP, e.latlng.lat, e.latlng.lng);
+
       const html = `
         緯度 ${e.latlng.lat.toFixed(2)}°, 経度 ${e.latlng.lng.toFixed(2)}°<br/>
         可視衛星: ${visibleCount}<br/>
-        GDOP: ${dops.GDOP.toFixed(2)}<br/>
-        PDOP: ${dops.PDOP.toFixed(2)}<br/>
-        HDOP: ${dops.HDOP.toFixed(2)}<br/>
-        VDOP: ${dops.VDOP.toFixed(2)}
+        GDOP: ${gEff.toFixed(2)}<br/>
+        PDOP: ${pEff.toFixed(2)}<br/>
+        HDOP: ${hEff.toFixed(2)}<br/>
+        VDOP: ${vEff.toFixed(2)}
       `;
       L.popup()
         .setLatLng(e.latlng)
@@ -798,7 +980,6 @@
     (async () => {
       setStatus("初期TLEを取得しています (CelesTrak GNSS)...", false);
       await loadSelectedTles();
-      // ★ 初期ロード時のみ自動計算
       recalcDopHeatmap();
     })();
   </script>
