@@ -192,6 +192,19 @@
       opacity: 0.8;
     }
   </style>
+
+  <script>
+    (function () {
+      const PASSWORD = "Haneishi"; // 
+      const input = prompt("パスワードを入力してください");
+      if (input !== PASSWORD) {
+        alert("パスワードが違います");
+        document.body.innerHTML = "";
+        throw new Error("Unauthorized");
+      }
+    })();
+  </script>
+
 </head>
 <body>
   <div class="page">
