@@ -1,39 +1,460 @@
-name: Daily TLE Download (ALL + GNSS)
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>Orbit Element Viewer – Kei-DOP TLE Library</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
 
-on:
-  workflow_dispatch: {}
-  schedule:
-    - cron: "30 0 * * *"  # daily 00:30 UTC (09:30 JST)
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #050816;
+      color: #f5f5f5;
+    }
+    .page {
+      display: grid;
+      grid-template-columns: 380px 1fr;
+      height: 100vh;
+    }
+    .panel {
+      border-right: 1px solid rgba(255,255,255,0.12);
+      padding: 12px;
+      overflow: auto;
+      background: rgba(5,8,22,0.96);
+    }
+    .main {
+      padding: 12px;
+      overflow: auto;
+    }
+    h1 { font-size: 16px; margin: 0 0 10px 0; }
+    h2 { font-size: 13px; margin: 14px 0 6px 0; opacity: 0.95; }
+    label { font-size: 12px; opacity: 0.9; }
+    input, select, button, textarea {
+      font-size: 12px;
+      padding: 6px 8px;
+      background: #0b1020;
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 8px;
+      color: #f5f5f5;
+      width: 100%;
+    }
+    button {
+      cursor: pointer;
+      border: none;
+      background: linear-gradient(135deg, #3b82f6, #22c55e);
+      margin-top: 8px;
+      padding: 8px 10px;
+      border-radius: 999px;
+      width: auto;
+    }
+    button.secondary {
+      background: rgba(255,255,255,0.12);
+    }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .hint { font-size: 11px; opacity: 0.75; margin-top: 6px; }
+    .list {
+      margin-top: 8px;
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    .list-header {
+      padding: 8px 10px;
+      background: rgba(255,255,255,0.06);
+      font-size: 11px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .list-body { max-height: 36vh; overflow: auto; }
+    .item {
+      display: grid;
+      grid-template-columns: 24px 1fr;
+      gap: 8px;
+      padding: 8px 10px;
+      border-top: 1px solid rgba(255,255,255,0.08);
+      align-items: start;
+    }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-variant-numeric: tabular-nums; }
+    .small { font-size: 11px; opacity: 0.8; }
+    .pill {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.16);
+      font-size: 10px;
+      opacity: 0.85;
+      margin-left: 6px;
+    }
+    .status {
+      margin-top: 10px;
+      padding: 8px 10px;
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 10px;
+      background: rgba(15,23,42,0.7);
+      font-size: 12px;
+    }
+    canvas { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.12); border-radius: 12px; }
+  </style>
 
-permissions:
-  contents: write
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://unpkg.com/satellite.js@5.0.0/dist/satellite.min.js"></script>
+</head>
 
-concurrency:
-  group: daily-tle
-  cancel-in-progress: false
+<body>
+  <div class="page">
+    <div class="panel">
+      <h1>Orbit Element Viewer <span class="pill">Repo TLE</span></h1>
 
-jobs:
-  fetch:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      <h2>期間</h2>
+      <div class="row">
+        <div>
+          <label>直近N日（repoのアーカイブから）</label>
+          <input id="daysBack" type="number" min="1" max="180" value="30" />
+        </div>
+        <div>
+          <label>要素</label>
+          <select id="elementSel">
+            <option value="incl">Inclination i (deg)</option>
+            <option value="raan">RAAN Ω (deg)</option>
+            <option value="ecc">Eccentricity e</option>
+            <option value="argp">Arg Perigee ω (deg)</option>
+            <option value="M">Mean Anomaly M (deg)</option>
+            <option value="n">Mean Motion n (rev/day)</option>
+            <option value="a">Semi-major axis a (km)</option>
+          </select>
+        </div>
+      </div>
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
+      <h2>検索（NORAD ID / 衛星名）</h2>
+      <input id="query" placeholder="例: 25544 / STARLINK / QZS-1 / COSMOS" />
+      <div class="row">
+        <button id="searchBtn">検索</button>
+        <button id="clearBtn" class="secondary">クリア</button>
+      </div>
+      <div class="hint">検索は「最新TLE（data/all/tle_latest.txt）」をインデックスして行います。</div>
 
-      - name: Fetch TLEs (ALL + GNSS)
-        run: python scripts/fetch_tle.py
+      <div class="list">
+        <div class="list-header">
+          <span>検索結果</span>
+          <span class="small mono" id="resultCount">0</span>
+        </div>
+        <div class="list-body" id="resultList"></div>
+      </div>
 
-      - name: Build indexes (index.json)
-        run: python scripts/build_index.py
+      <div class="list" style="margin-top:10px;">
+        <div class="list-header">
+          <span>選択中</span>
+          <span class="small mono" id="selCount">0</span>
+        </div>
+        <div class="list-body" id="selectedList"></div>
+      </div>
 
-      - name: Commit & push if changed
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add data/**/tle_*.txt data/**/index.json
-          git diff --cached --quiet || git commit -m "Daily TLE update (ALL + GNSS)"
-          git push
+      <button id="plotBtn" style="margin-top:10px;">選択衛星をプロット</button>
+
+      <div class="status" id="status">status: ready</div>
+    </div>
+
+    <div class="main">
+      <h1 style="margin:0 0 10px 0;">Time Series</h1>
+      <canvas id="chart" height="120"></canvas>
+      <div class="hint" style="margin-top:10px;">
+        横軸＝TLE Epoch（UTC）。縦軸＝選択した要素。<br/>
+        同一衛星の複数TLEは epoch順に接続されます。
+      </div>
+    </div>
+  </div>
+
+<script>
+(() => {
+  const statusEl = document.getElementById("status");
+  const queryEl = document.getElementById("query");
+  const searchBtn = document.getElementById("searchBtn");
+  const clearBtn = document.getElementById("clearBtn");
+  const resultList = document.getElementById("resultList");
+  const selectedList = document.getElementById("selectedList");
+  const resultCount = document.getElementById("resultCount");
+  const selCount = document.getElementById("selCount");
+  const plotBtn = document.getElementById("plotBtn");
+  const daysBackEl = document.getElementById("daysBack");
+  const elementSel = document.getElementById("elementSel");
+
+  function setStatus(msg, isErr=false) {
+    statusEl.textContent = "status: " + msg;
+    statusEl.style.background = isErr ? "rgba(127,29,29,0.8)" : "rgba(15,23,42,0.7)";
+    statusEl.style.color = isErr ? "#fecaca" : "#e5e7eb";
+  }
+
+  // ---------- TLE parse helpers ----------
+  function jdToDate(jd) {
+    // Julian Date -> JS Date (UTC)
+    const ms = (jd - 2440587.5) * 86400000;
+    return new Date(ms);
+  }
+
+  function elementsFromSatrec(satrec) {
+    const deg = (r) => r * 180 / Math.PI;
+    const nRevDay = satrec.no * 1440 / (2 * Math.PI); // satrec.no is rad/min
+    const nRadSec = satrec.no / 60.0;
+    const mu = 398600.4418; // km^3/s^2
+    const aKm = Math.pow(mu / (nRadSec * nRadSec), 1/3);
+
+    return {
+      incl: deg(satrec.inclo),
+      raan: deg(satrec.nodeo),
+      ecc: satrec.ecco,
+      argp: deg(satrec.argpo),
+      M: deg(satrec.mo),
+      n: nRevDay,
+      a: aKm
+    };
+  }
+
+  function parseTleTriples(text) {
+    const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    const out = [];
+    let name = null;
+    for (let i=0; i<lines.length; ) {
+      const l = lines[i];
+      if (!l.startsWith("1 ") && !l.startsWith("2 ")) {
+        name = l;
+        i++;
+        continue;
+      }
+      if (l.startsWith("1 ") && i+1 < lines.length && lines[i+1].startsWith("2 ")) {
+        const l1 = lines[i];
+        const l2 = lines[i+1];
+        try {
+          const satrec = satellite.twoline2satrec(l1, l2);
+          const norad = l1.substring(2,7).trim();
+          const epoch = jdToDate(satrec.jdsatepoch);
+          out.push({ name: name || ("SAT-" + norad), norad, satrec, epoch, l1, l2 });
+        } catch {}
+        name = null;
+        i += 2;
+        continue;
+      }
+      i++;
+    }
+    return out;
+  }
+
+  // ---------- Repo manifest ----------
+  let manifest = null;
+  async function loadManifest() {
+    if (manifest) return manifest;
+    setStatus("loading data/all/index.json ...");
+    const res = await fetch("data/all/index.json", { cache: "no-store" });
+    if (!res.ok) throw new Error("index.json fetch failed: " + res.status);
+    manifest = await res.json();
+    setStatus("manifest loaded (" + (manifest.archives?.length || 0) + " days)");
+    return manifest;
+  }
+
+  // ---------- Latest index for searching ----------
+  let latestIndex = null; // [{name,norad}]
+  async function buildLatestIndex() {
+    if (latestIndex) return latestIndex;
+    await loadManifest();
+    setStatus("loading latest TLE for indexing...");
+    const res = await fetch(manifest.latest, { cache: "no-store" });
+    if (!res.ok) throw new Error("latest tle fetch failed: " + res.status);
+    const txt = await res.text();
+    const triples = parseTleTriples(txt);
+    latestIndex = triples.map(t => ({ name: t.name, norad: t.norad }));
+    setStatus("search index ready (" + latestIndex.length + " sats)");
+    return latestIndex;
+  }
+
+  // ---------- UI state ----------
+  const selected = new Map(); // norad -> {norad,name}
+
+  function renderLists(results=[]) {
+    // results
+    resultList.innerHTML = "";
+    resultCount.textContent = String(results.length);
+    for (const r of results) {
+      const id = "r_" + r.norad;
+      const div = document.createElement("div");
+      div.className = "item";
+      div.innerHTML = `
+        <input type="checkbox" id="${id}" ${selected.has(r.norad) ? "checked" : ""} />
+        <div>
+          <div><span class="mono">${r.norad}</span> <span>${escapeHtml(r.name)}</span></div>
+          <div class="small">click to select</div>
+        </div>
+      `;
+      const cb = div.querySelector("input");
+      cb.addEventListener("change", () => {
+        if (cb.checked) selected.set(r.norad, r);
+        else selected.delete(r.norad);
+        renderSelected();
+        // keep checkbox sync
+      });
+      resultList.appendChild(div);
+    }
+    renderSelected();
+  }
+
+  function renderSelected() {
+    selectedList.innerHTML = "";
+    selCount.textContent = String(selected.size);
+    for (const [norad, s] of selected.entries()) {
+      const div = document.createElement("div");
+      div.className = "item";
+      div.innerHTML = `
+        <button class="secondary" style="width:24px;height:24px;padding:0;border-radius:8px;">×</button>
+        <div>
+          <div><span class="mono">${norad}</span> <span>${escapeHtml(s.name)}</span></div>
+          <div class="small">selected</div>
+        </div>
+      `;
+      div.querySelector("button").addEventListener("click", () => {
+        selected.delete(norad);
+        renderSelected();
+        // also uncheck in results if present
+        const cb = document.getElementById("r_" + norad);
+        if (cb) cb.checked = false;
+      });
+      selectedList.appendChild(div);
+    }
+  }
+
+  function escapeHtml(s) {
+    return (s || "").replace(/[&<>"']/g, (c) =>
+      ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c])
+    );
+  }
+
+  // ---------- Search ----------
+  async function doSearch() {
+    const q = (queryEl.value || "").trim();
+    if (!q) { renderLists([]); return; }
+    await buildLatestIndex();
+
+    const qU = q.toUpperCase();
+    const byNorad = /^\d+$/.test(q) ? q : null;
+
+    const out = [];
+    for (const r of latestIndex) {
+      if (byNorad) {
+        if (r.norad === byNorad) out.push(r);
+      } else {
+        if ((r.name || "").toUpperCase().includes(qU) || (r.norad || "").includes(q)) out.push(r);
+      }
+      if (out.length >= 200) break; // safety
+    }
+    renderLists(out);
+  }
+
+  searchBtn.addEventListener("click", doSearch);
+  queryEl.addEventListener("keydown", (e) => { if (e.key === "Enter") doSearch(); });
+  clearBtn.addEventListener("click", () => { queryEl.value=""; renderLists([]); });
+
+  // ---------- Load time series ----------
+  let chart = null;
+  const ctx = document.getElementById("chart").getContext("2d");
+
+  async function loadArchivesLastNDays(nDays) {
+    const man = await loadManifest();
+    const arr = man.archives || [];
+    if (!arr.length) return [];
+
+    // last N
+    const sliced = arr.slice(Math.max(0, arr.length - nDays));
+    // fetch all texts (can be heavy; N=30 is ok-ish)
+    const texts = [];
+    for (const it of sliced) {
+      const res = await fetch(it.path, { cache: "no-store" });
+      if (!res.ok) continue;
+      texts.push(await res.text());
+    }
+    return texts;
+  }
+
+  async function plotSelected() {
+    if (selected.size === 0) { setStatus("no satellites selected", true); return; }
+    const nDays = Math.max(1, Math.min(180, parseInt(daysBackEl.value || "30", 10)));
+    const elemKey = elementSel.value;
+
+    setStatus(`loading last ${nDays} days archives...`);
+    const texts = await loadArchivesLastNDays(nDays);
+    if (!texts.length) { setStatus("no archives found", true); return; }
+
+    setStatus("parsing TLE archives...");
+    // build per-sat points
+    const series = new Map(); // norad -> [{x:Date, y:number}]
+    for (const [norad] of selected.entries()) series.set(norad, []);
+
+    for (const txt of texts) {
+      const triples = parseTleTriples(txt);
+      for (const t of triples) {
+        if (!series.has(t.norad)) continue;
+        const el = elementsFromSatrec(t.satrec);
+        const y = el[elemKey];
+        if (!isFinite(y)) continue;
+        series.get(t.norad).push({ x: t.epoch, y });
+      }
+    }
+
+    // sort points
+    const datasets = [];
+    for (const [norad, pts] of series.entries()) {
+      pts.sort((a,b) => a.x - b.x);
+      const name = selected.get(norad)?.name || norad;
+      datasets.push({
+        label: `${norad} ${name}`,
+        data: pts,
+        parsing: false,
+        pointRadius: 1.5,
+        borderWidth: 1.5,
+        tension: 0
+      });
+    }
+
+    if (chart) chart.destroy();
+    chart = new Chart(ctx, {
+      type: "line",
+      data: { datasets },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          x: {
+            type: "time",
+            time: { tooltipFormat: "yyyy-MM-dd HH:mm 'UTC'" },
+            ticks: { color: "rgba(245,245,245,0.8)" },
+            grid: { color: "rgba(255,255,255,0.08)" }
+          },
+          y: {
+            ticks: { color: "rgba(245,245,245,0.8)" },
+            grid: { color: "rgba(255,255,255,0.08)" }
+          }
+        },
+        plugins: {
+          legend: { labels: { color: "rgba(245,245,245,0.9)" } },
+          tooltip: { callbacks: {
+            label: (ctx) => `${ctx.dataset.label}: ${ctx.parsed.y}`
+          }}
+        }
+      }
+    });
+
+    setStatus("done");
+  }
+
+  plotBtn.addEventListener("click", () => plotSelected());
+  elementSel.addEventListener("change", () => { if (chart) plotSelected().catch(()=>{}); });
+
+  // init
+  setStatus("ready (load index on first search/plot)");
+})();
+</script>
+
+<!-- Chart.js time scale adapter -->
+<script src="https://cdn.jsdelivr.net/npm/luxon@3.4.4/build/global/luxon.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon@1.3.1/dist/chartjs-adapter-luxon.umd.min.js"></script>
+</body>
+</html>
