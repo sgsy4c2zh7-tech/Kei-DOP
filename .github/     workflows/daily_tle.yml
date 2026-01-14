@@ -35,3 +35,4 @@ jobs:
           git add data/*.txt
           git diff --cached --quiet || git commit -m "Daily TLE update"
           git push
+# force reindex
