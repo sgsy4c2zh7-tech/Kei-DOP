@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
-  <title>GNSS DOP Heatmap – CelesTrak + satellite.js + TEC (Timeline 10-min)</title>
+  <title>GNSS DOP Heatmap – CelesTrak + Repo TLE + satellite.js + TEC (Timeline 10-min)</title>
 
   <!-- Leaflet CSS -->
   <link
@@ -75,7 +75,7 @@
       width: 100%;
       resize: vertical;
       min-height: 40px;
-      max-height: 120px;
+      max-height: 140px;
     }
 
     .toolbar input[type="color"] {
@@ -135,8 +135,9 @@
       color: #fecaca;
       font-size: 11px;
       border-radius: 8px;
-      max-width: 420px;
+      max-width: 520px;
       display: none;
+      white-space: pre-wrap;
     }
 
     .colorbar-preview {
@@ -195,6 +196,7 @@
             <label><input type="checkbox" class="sys-check" value="qzss" checked><span>QZSS</span></label>
           </div>
         </div>
+
         <div class="toolbar-row">
           <label>
             DOP:
@@ -214,12 +216,32 @@
             <input id="obsHeightKm" type="number" value="0" step="0.1" />
           </label>
         </div>
+
+        <!-- ★追加：TLEソース切替 -->
+        <div class="toolbar-row">
+          <label>
+            TLE source:
+            <select id="tleSource">
+              <option value="celestrak">CelesTrak (live)</option>
+              <option value="repo">Repo library (daily)</option>
+              <option value="localcache">Browser cache</option>
+              <option value="manual">Manual paste</option>
+            </select>
+          </label>
+        </div>
+
+        <!-- ★追加：manual貼り付け -->
+        <div class="toolbar-row" style="width:100%;">
+          <textarea id="manualTleInput" placeholder="Manual TLE (name + 2 lines) を貼り付け。source=Manualで使用"></textarea>
+        </div>
+
         <div class="toolbar-row">
           <button id="reloadTle">TLE更新（保存）</button>
           <button id="clearTleCache" class="secondary">TLE履歴クリア</button>
         </div>
+
         <div class="toolbar-row" style="font-size:10px;opacity:0.75;max-width:320px;">
-          ※「過去に近いTLEエポック」は、ブラウザに保存されたTLEスナップショット群から最も近いものを選びます（最初は履歴が少ないので精度は徐々に上がる）。
+          ※ Repo library は data/gnss/* の日次アーカイブを参照します（GitHub Actionsで毎日更新）。
         </div>
       </div>
 
@@ -230,22 +252,13 @@
         </div>
 
         <div class="toolbar-row">
-          <label>
-            開始:
-            <input id="startTime" type="datetime-local" />
-          </label>
-          <label>
-            終了:
-            <input id="endTime" type="datetime-local" />
-          </label>
+          <label>開始:<input id="startTime" type="datetime-local" /></label>
+          <label>終了:<input id="endTime" type="datetime-local" /></label>
           <button id="applyRange" class="secondary">範囲反映</button>
         </div>
 
         <div class="toolbar-row">
-          <label>
-            時刻:
-            <input id="timeIndex" type="range" min="0" max="0" step="1" value="0" />
-          </label>
+          <label>時刻:<input id="timeIndex" type="range" min="0" max="0" step="1" value="0" /></label>
         </div>
 
         <div class="toolbar-row">
@@ -285,35 +298,17 @@
       <!-- カラーバー & 透明度 -->
       <div class="toolbar-group">
         <div class="toolbar-row">
-          <label>
-            DOP min:
-            <input id="dopMin" type="number" value="0.5" step="0.1" />
-          </label>
-          <label>
-            DOP max:
-            <input id="dopMax" type="number" value="10" step="0.5" />
-          </label>
+          <label>DOP min:<input id="dopMin" type="number" value="0.5" step="0.1" /></label>
+          <label>DOP max:<input id="dopMax" type="number" value="10" step="0.5" /></label>
         </div>
         <div class="toolbar-row">
-          <label>
-            色(低):
-            <input id="colorLow" type="color" value="#22c55e" />
-          </label>
-          <label>
-            色(中):
-            <input id="colorMid" type="color" value="#eab308" />
-          </label>
-          <label>
-            色(高):
-            <input id="colorHigh" type="color" value="#ef4444" />
-          </label>
+          <label>色(低):<input id="colorLow" type="color" value="#22c55e" /></label>
+          <label>色(中):<input id="colorMid" type="color" value="#eab308" /></label>
+          <label>色(高):<input id="colorHigh" type="color" value="#ef4444" /></label>
         </div>
         <div class="colorbar-preview" id="colorbarPreview"></div>
         <div class="toolbar-row">
-          <label>
-            ヒートマップ透明度:
-            <input id="alphaSlider" type="range" min="0.1" max="1" step="0.05" value="0.7" />
-          </label>
+          <label>ヒートマップ透明度:<input id="alphaSlider" type="range" min="0.1" max="1" step="0.05" value="0.7" /></label>
           <span id="alphaLabel" style="font-size:11px;">α = 0.70</span>
         </div>
         <div class="toolbar-row">
@@ -341,14 +336,8 @@
           </label>
         </div>
         <div class="toolbar-row">
-          <label>
-            TEC基準(TECU):
-            <input id="tecRef" type="number" value="20" step="1" style="width:60px;" />
-          </label>
-          <label title="(TEC-TEC基準)/TEC基準 × β">
-            β(感度):
-            <input id="tecBeta" type="number" value="0.5" step="0.1" style="width:60px;" />
-          </label>
+          <label>TEC基準(TECU):<input id="tecRef" type="number" value="20" step="1" style="width:60px;" /></label>
+          <label title="(TEC-TEC基準)/TEC基準 × β">β(感度):<input id="tecBeta" type="number" value="0.5" step="0.1" style="width:60px;" /></label>
         </div>
         <div class="toolbar-row" style="font-size:10px;opacity:0.8;max-width:260px;">
           DOP補正式: DOP_eff = DOP_geom × (1 + β × (TEC − TEC基準) / TEC基準)
@@ -383,48 +372,35 @@
   <script src="https://unpkg.com/satellite.js@5.0.0/dist/satellite.min.js"></script>
 
   <script>
-    // ====== GNSS設定（CelesTrak GROUP） ======
+    // ====== GNSS設定 ======
     const systemsConfig = {
-      gps:     { label: "GPS",     group: "gps-ops" },
-      galileo: { label: "Galileo", group: "galileo" },
-      glonass: { label: "GLONASS", group: "glonass" },
-      beidou:  { label: "BeiDou",  group: "beidou" },
-      qzss:    { label: "QZSS",    group: "qzss" }
+      gps:     { label: "GPS",     group: "gps-ops", repoIndex: "data/gnss/gps/index.json" },
+      galileo: { label: "Galileo", group: "galileo", repoIndex: "data/gnss/galileo/index.json" },
+      glonass: { label: "GLONASS", group: "glonass", repoIndex: "data/gnss/glonass/index.json" },
+      beidou:  { label: "BeiDou",  group: "beidou",  repoIndex: "data/gnss/beidou/index.json" },
+      qzss:    { label: "QZSS",    group: "qzss",    repoIndex: "data/gnss/qzss/index.json" }
     };
 
-    // ====== グリッド（通常） ======
-    const LAT_STEP = 10;
-    const LON_STEP = 10;
-
-    // ドラッグ中軽量モード
-    const LAT_STEP_LITE = 20;
-    const LON_STEP_LITE = 20;
+    // ====== グリッド ======
+    const LAT_STEP = 10, LON_STEP = 10;
+    const LAT_STEP_LITE = 20, LON_STEP_LITE = 20;
 
     // ====== TLE履歴（localStorage） ======
     const TLE_CACHE_KEY = "gnss_tle_snapshots_v1";
-    const TLE_CACHE_KEEP_HOURS = 72;   // 3日分保持
-    const TLE_MAX_SNAPSHOTS_PER_SYS = 60; // 保険
+    const TLE_CACHE_KEEP_HOURS = 72;
+    const TLE_MAX_SNAPSHOTS_PER_SYS = 60;
 
-    /**
-     * snapshots[sys] = [{ fetchedAtMs: number, tleText: string }]
-     * ※tleTextはそのまま保存（サイズは増えるが簡単で確実）
-     */
     function loadTleSnapshots() {
       try {
         const raw = localStorage.getItem(TLE_CACHE_KEY);
         if (!raw) return {};
         const obj = JSON.parse(raw);
         return obj && typeof obj === "object" ? obj : {};
-      } catch {
-        return {};
-      }
+      } catch { return {}; }
     }
     function saveTleSnapshots(obj) {
-      try {
-        localStorage.setItem(TLE_CACHE_KEY, JSON.stringify(obj));
-      } catch (e) {
-        console.warn("TLE snapshot save failed", e);
-      }
+      try { localStorage.setItem(TLE_CACHE_KEY, JSON.stringify(obj)); }
+      catch (e) { console.warn("TLE snapshot save failed", e); }
     }
     function pruneSnapshots(snapshots) {
       const nowMs = Date.now();
@@ -433,7 +409,6 @@
         snapshots[sys] = (snapshots[sys] || [])
           .filter(s => (nowMs - s.fetchedAtMs) <= keepMs)
           .sort((a,b) => a.fetchedAtMs - b.fetchedAtMs);
-        // 上限
         if (snapshots[sys].length > TLE_MAX_SNAPSHOTS_PER_SYS) {
           snapshots[sys] = snapshots[sys].slice(-TLE_MAX_SNAPSHOTS_PER_SYS);
         }
@@ -444,10 +419,8 @@
       const snapshots = loadTleSnapshots();
       const arr = snapshots[sys] || [];
       const fetchedAtMs = Date.now();
-      // 直近と同一なら追加しない（無駄防止）
       const last = arr.length ? arr[arr.length - 1] : null;
       if (last && last.tleText === tleText) return;
-
       arr.push({ fetchedAtMs, tleText });
       snapshots[sys] = arr;
       saveTleSnapshots(pruneSnapshots(snapshots));
@@ -465,23 +438,69 @@
       return best;
     }
 
+    // ====== Repo TLE: index.json を使って「近い日」を選ぶ ======
+    const repoIndexCache = new Map(); // sys -> index.json
+    async function loadRepoIndex(sys) {
+      if (repoIndexCache.has(sys)) return repoIndexCache.get(sys);
+      const url = systemsConfig[sys]?.repoIndex;
+      if (!url) throw new Error("repoIndex not defined for " + sys);
+      const res = await fetch(url, { cache: "no-store" });
+      if (!res.ok) throw new Error("repo index fetch failed: " + res.status);
+      const j = await res.json();
+      repoIndexCache.set(sys, j);
+      return j;
+    }
+
+    function toUtcDateStr(d) {
+      const y = d.getUTCFullYear();
+      const m = String(d.getUTCMonth()+1).padStart(2,"0");
+      const da = String(d.getUTCDate()).padStart(2,"0");
+      return `${y}-${m}-${da}`;
+    }
+
+    function pickNearestArchive(indexJson, targetDateStr) {
+      const arr = indexJson.archives || [];
+      if (!arr.length) return null;
+
+      // 日付差を最小にする
+      const target = new Date(targetDateStr + "T00:00:00Z").getTime();
+      let best = arr[0];
+      let bestAbs = Infinity;
+      for (const it of arr) {
+        const t = new Date(it.date + "T00:00:00Z").getTime();
+        const d = Math.abs(t - target);
+        if (d < bestAbs) { bestAbs = d; best = it; }
+      }
+      return best;
+    }
+
+    async function fetchRepoTleForTime(sys, time) {
+      const idx = await loadRepoIndex(sys);
+      const day = toUtcDateStr(time);
+      const best = pickNearestArchive(idx, day);
+      if (!best) {
+        // fallback to latest
+        const res0 = await fetch(idx.latest, { cache: "no-store" });
+        if (!res0.ok) throw new Error("repo latest fetch failed");
+        return { tleText: await res0.text(), label: `${systemsConfig[sys].label}@REPO(LATEST)` };
+      }
+      const res = await fetch(best.path, { cache: "no-store" });
+      if (!res.ok) throw new Error("repo archive fetch failed: " + best.path);
+      return { tleText: await res.text(), label: `${systemsConfig[sys].label}@REPO(${best.date})` };
+    }
+
     // ====== グローバル状態 ======
     let allSatellites = []; // [{name, system, satrec}]
     let dopLayer = null;
     let currentAlpha = 0.7;
-
-    // TEC
     let tecGrid = [];
     let tecLoaded = false;
-
-    // 再生
     let playTimer = null;
 
     // UI
     const dopTypeSel   = document.getElementById("dopType");
     const elevMaskEl   = document.getElementById("elevMask");
     const obsHeightEl  = document.getElementById("obsHeightKm");
-
     const startTimeEl  = document.getElementById("startTime");
     const endTimeEl    = document.getElementById("endTime");
     const applyRangeBtn= document.getElementById("applyRange");
@@ -493,36 +512,33 @@
     const toStartBtn   = document.getElementById("toStartBtn");
     const toEndBtn     = document.getElementById("toEndBtn");
     const playIntervalMsEl = document.getElementById("playIntervalMs");
-
     const focusRegionEl   = document.getElementById("focusRegion");
-
     const dopMinEl    = document.getElementById("dopMin");
     const dopMaxEl    = document.getElementById("dopMax");
     const colorLowEl  = document.getElementById("colorLow");
     const colorMidEl  = document.getElementById("colorMid");
     const colorHighEl = document.getElementById("colorHigh");
     const colorbarPreview = document.getElementById("colorbarPreview");
-
     const alphaSlider = document.getElementById("alphaSlider");
     const alphaLabel  = document.getElementById("alphaLabel");
-
     const reloadTleBtn= document.getElementById("reloadTle");
     const clearTleCacheBtn = document.getElementById("clearTleCache");
     const recalcBtn   = document.getElementById("recalcBtn");
-
     const dragLiteEl  = document.getElementById("dragLite");
-
     const epochLabel  = document.getElementById("epochLabel");
     const visibleTokyoLabel = document.getElementById("visibleTokyoLabel");
     const dopTokyoLabel     = document.getElementById("dopTokyoLabel");
     const statusText  = document.getElementById("statusText");
     const sysChecks   = document.querySelectorAll(".sys-check");
-
     const tecInputEl  = document.getElementById("tecInput");
     const loadTecBtn  = document.getElementById("loadTecBtn");
     const useTecCheckbox = document.getElementById("useTecCheckbox");
     const tecRefEl    = document.getElementById("tecRef");
     const tecBetaEl   = document.getElementById("tecBeta");
+
+    // ★追加
+    const tleSourceEl = document.getElementById("tleSource");
+    const manualTleInputEl = document.getElementById("manualTleInput");
 
     // ====== Map ======
     const map = L.map("map", {
@@ -555,10 +571,7 @@
     function hexToRgb(hex) {
       const m = hex.replace("#", "");
       const bigint = parseInt(m, 16);
-      const r = (bigint >> 16) & 255;
-      const g = (bigint >> 8) & 255;
-      const b = bigint & 255;
-      return { r, g, b };
+      return { r:(bigint>>16)&255, g:(bigint>>8)&255, b:bigint&255 };
     }
     function interpColor(c1, c2, t) {
       return {
@@ -583,10 +596,7 @@
       return `rgba(${c.r},${c.g},${c.b},${currentAlpha})`;
     }
     function updateColorbarPreview() {
-      const low = colorLowEl.value;
-      const mid = colorMidEl.value;
-      const high = colorHighEl.value;
-      colorbarPreview.style.background = `linear-gradient(90deg, ${low}, ${mid}, ${high})`;
+      colorbarPreview.style.background = `linear-gradient(90deg, ${colorLowEl.value}, ${colorMidEl.value}, ${colorHighEl.value})`;
     }
     updateColorbarPreview();
     colorLowEl.addEventListener("input", updateColorbarPreview);
@@ -596,9 +606,7 @@
     function updateAlpha() {
       currentAlpha = parseFloat(alphaSlider.value);
       alphaLabel.textContent = `α = ${currentAlpha.toFixed(2)}`;
-      dopLayer.eachLayer(layer => {
-        if (layer.setStyle) layer.setStyle({ fillOpacity: currentAlpha });
-      });
+      dopLayer.eachLayer(layer => { if (layer.setStyle) layer.setStyle({ fillOpacity: currentAlpha }); });
     }
     updateAlpha();
     alphaSlider.addEventListener("input", updateAlpha);
@@ -619,28 +627,16 @@
 
     // ====== 時間ユーティリティ ======
     const TEN_MIN_MS = 10 * 60 * 1000;
-
     function pad2(n) { return String(n).padStart(2, "0"); }
     function toLocalInputValue(dt) {
-      const y = dt.getFullYear();
-      const mo = pad2(dt.getMonth()+1);
-      const d = pad2(dt.getDate());
-      const h = pad2(dt.getHours());
-      const m = pad2(dt.getMinutes());
-      return `${y}-${mo}-${d}T${h}:${m}`;
+      return `${dt.getFullYear()}-${pad2(dt.getMonth()+1)}-${pad2(dt.getDate())}T${pad2(dt.getHours())}:${pad2(dt.getMinutes())}`;
     }
     function parseLocalInputValue(v) {
-      // datetime-localはローカル扱い。new Date(v) でOK
       const dt = new Date(v);
       return isNaN(dt.getTime()) ? null : dt;
     }
     function formatUtc(dt) {
-      const y  = dt.getUTCFullYear();
-      const mo = pad2(dt.getUTCMonth()+1);
-      const d  = pad2(dt.getUTCDate());
-      const h  = pad2(dt.getUTCHours());
-      const m  = pad2(dt.getUTCMinutes());
-      return `${y}-${mo}-${d} ${h}:${m} UTC`;
+      return `${dt.getUTCFullYear()}-${pad2(dt.getUTCMonth()+1)}-${pad2(dt.getUTCDate())} ${pad2(dt.getUTCHours())}:${pad2(dt.getUTCMinutes())} UTC`;
     }
 
     // ====== タイムライン状態 ======
@@ -651,14 +647,10 @@
       const now = new Date();
       const min = new Date(now.getTime() - 3*24*3600*1000);
       const max = new Date(now.getTime() + 3*24*3600*1000);
-
-      // input制約
       startTimeEl.min = toLocalInputValue(min);
       startTimeEl.max = toLocalInputValue(max);
       endTimeEl.min   = toLocalInputValue(min);
       endTimeEl.max   = toLocalInputValue(max);
-
-      // 初期値（デフォルト：過去6h〜未来6h）
       const defS = new Date(now.getTime() - 6*3600*1000);
       const defE = new Date(now.getTime() + 6*3600*1000);
       startTimeEl.value = toLocalInputValue(defS);
@@ -668,26 +660,16 @@
     function applyRangeFromInputs() {
       const s = parseLocalInputValue(startTimeEl.value);
       const e = parseLocalInputValue(endTimeEl.value);
-      if (!s || !e) {
-        setStatus("開始/終了の日時が不正です。", true);
-        return false;
-      }
-      if (e.getTime() <= s.getTime()) {
-        setStatus("終了は開始より後にしてください。", true);
-        return false;
-      }
+      if (!s || !e) { setStatus("開始/終了の日時が不正です。", true); return false; }
+      if (e.getTime() <= s.getTime()) { setStatus("終了は開始より後にしてください。", true); return false; }
       rangeStart = s;
       rangeEnd = e;
-
       const steps = Math.floor((rangeEnd.getTime() - rangeStart.getTime()) / TEN_MIN_MS) + 1;
       timeIndexEl.min = 0;
       timeIndexEl.max = Math.max(0, steps - 1);
       timeIndexEl.step = 1;
-
-      // 現在位置が範囲外なら戻す
       const cur = parseInt(timeIndexEl.value || "0", 10);
       if (cur > (steps - 1)) timeIndexEl.value = steps - 1;
-
       updateTimeLabels();
       setStatus(`範囲反映: ${formatUtc(rangeStart)} 〜 ${formatUtc(rangeEnd)}（${steps} frames）`, false);
       return true;
@@ -695,16 +677,11 @@
 
     function getSelectedTime() {
       const idx = parseInt(timeIndexEl.value || "0", 10);
-      const t = new Date(rangeStart.getTime() + idx * TEN_MIN_MS);
-      return t;
+      return new Date(rangeStart.getTime() + idx * TEN_MIN_MS);
     }
 
     function updateTimeLabels() {
-      if (!rangeStart || !rangeEnd) {
-        timeLabelEl.textContent = "UTC: -";
-        stepLabelEl.textContent = "step: -";
-        return;
-      }
+      if (!rangeStart || !rangeEnd) { timeLabelEl.textContent = "UTC: -"; stepLabelEl.textContent = "step: -"; return; }
       const idx = parseInt(timeIndexEl.value || "0", 10);
       const steps = parseInt(timeIndexEl.max || "0", 10) + 1;
       const t = getSelectedTime();
@@ -712,7 +689,7 @@
       stepLabelEl.textContent = `step: ${idx+1}/${steps} (10min)`;
     }
 
-    // ====== TLE取得 & パース ======
+    // ====== TLE取得（CelesTrak） ======
     async function fetchTleGroup(groupName) {
       const url = `https://celestrak.org/NORAD/elements/gp.php?GROUP=${encodeURIComponent(groupName)}&FORMAT=tle`;
       const res = await fetch(url);
@@ -722,7 +699,6 @@
 
     function parseTleText(tleText, systemKey) {
       const lines = tleText.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
-
       const sats = [];
       let tmpName = null;
       let satIndex = 0;
@@ -739,21 +715,17 @@
         if (line.startsWith("1 ") && (i + 1) < lines.length && lines[i + 1].startsWith("2 ")) {
           const l1 = lines[i];
           const l2 = lines[i + 1];
-
           const name = tmpName || `${systemKey.toUpperCase()}-${++satIndex}`;
-
           try {
             const satrec = satellite.twoline2satrec(l1, l2);
             sats.push({ name, system: systemKey, satrec });
           } catch (e) {
             console.warn("TLE parse error", name, e);
           }
-
           tmpName = null;
           i += 2;
           continue;
         }
-
         i++;
       }
       return sats;
@@ -765,7 +737,38 @@
       return selected;
     }
 
-    // 選択時刻に最も近い snapshot を採用して、allSatellitesを構築
+    // ★統合：ソース別にTLEテキストを取る
+    async function getTleTextForSystemAtTime(sys, targetTime) {
+      const src = tleSourceEl.value;
+      const cfg = systemsConfig[sys];
+      if (!cfg) throw new Error("unknown sys " + sys);
+
+      if (src === "manual") {
+        const txt = (manualTleInputEl.value || "").trim();
+        if (!txt) throw new Error("Manual TLE is empty");
+        return { tleText: txt, label: `${cfg.label}@MANUAL` };
+      }
+
+      if (src === "repo") {
+        return await fetchRepoTleForTime(sys, targetTime);
+      }
+
+      if (src === "localcache") {
+        const snap = pickSnapshotForTime(sys, targetTime.getTime());
+        if (snap && snap.tleText) {
+          return { tleText: snap.tleText, label: `${cfg.label}@CACHE` };
+        }
+        // fallback
+        const live = await fetchTleGroup(cfg.group);
+        return { tleText: live, label: `${cfg.label}@LIVE(FB)` };
+      }
+
+      // default: celestrak live
+      const live = await fetchTleGroup(cfg.group);
+      return { tleText: live, label: `${cfg.label}@LIVE` };
+    }
+
+    // 選択時刻に応じて衛星セット再構築
     async function buildSatellitesForTime(targetTime) {
       const selected = getSelectedSystems();
       if (!selected.length) {
@@ -774,39 +777,20 @@
       }
 
       allSatellites = [];
-
-      // どのスナップショットを採用したか表示用
       const pickedInfo = [];
 
       for (const sys of selected) {
-        const cfg = systemsConfig[sys];
-        if (!cfg) continue;
-
-        // まず履歴から最適を探す
-        const snap = pickSnapshotForTime(sys, targetTime.getTime());
-        let tleText = null;
-        let used = "cache";
-        if (snap && snap.tleText) {
-          tleText = snap.tleText;
-          pickedInfo.push(`${cfg.label}@${new Date(snap.fetchedAtMs).toISOString().slice(0,16).replace("T"," ")}`);
-        } else {
-          // 履歴が無い場合は最新を取得（※過去近傍はまだできない）
-          used = "live";
-          tleText = await fetchTleGroup(cfg.group);
-          pickedInfo.push(`${cfg.label}@LIVE`);
-        }
-
+        const { tleText, label } = await getTleTextForSystemAtTime(sys, targetTime);
+        pickedInfo.push(label);
         const sats = parseTleText(tleText, sys);
         allSatellites.push(...sats);
-
-        // liveで取った場合、今後のために保存（手動保存に限定したいならここをコメントアウト）
       }
 
       epochLabel.textContent = pickedInfo.join(" / ");
       return allSatellites.length > 0;
     }
 
-    // 手動TLE更新（保存する）
+    // 手動TLE更新（保存する）= CelesTrak live を localStorage に保存（今まで通り）
     async function refreshAndStoreTles() {
       setStatus("TLE取得中（保存）...", false);
 
@@ -819,11 +803,10 @@
       try {
         for (const sys of selected) {
           const cfg = systemsConfig[sys];
-          if (!cfg) continue;
           const txt = await fetchTleGroup(cfg.group);
           addSnapshot(sys, txt);
         }
-        setStatus("TLE更新＆保存完了。タイムラインに応じて近いスナップショットを自動採用します。", false);
+        setStatus("TLE更新＆保存完了（Browser cache）。", false);
       } catch (e) {
         console.error(e);
         setStatus("TLE更新でエラー: " + e.message, true);
@@ -832,7 +815,6 @@
 
     reloadTleBtn.addEventListener("click", async () => {
       await refreshAndStoreTles();
-      // 現在選択時刻で再構築して再計算
       if (rangeStart) {
         const t = getSelectedTime();
         await buildSatellitesForTime(t);
@@ -855,8 +837,7 @@
       ];
       const N = 4;
       for (let i = 0; i < N; i++) {
-        let maxRow = i;
-        let maxVal = Math.abs(A[i][i]);
+        let maxRow = i, maxVal = Math.abs(A[i][i]);
         for (let r = i+1; r < N; r++) {
           const v = Math.abs(A[r][i]);
           if (v > maxVal) { maxVal = v; maxRow = r; }
@@ -884,30 +865,20 @@
     function computeDopsFromMatrix(G) {
       const n = G.length;
       if (n < 4) return { GDOP: null, PDOP: null, HDOP: null, VDOP: null };
-
-      const GTG = [
-        [0,0,0,0],
-        [0,0,0,0],
-        [0,0,0,0],
-        [0,0,0,0]
-      ];
+      const GTG = [[0,0,0,0],[0,0,0,0],[0,0,0,0],[0,0,0,0]];
       for (let i = 0; i < n; i++) {
         const row = G[i];
-        for (let r = 0; r < 4; r++) {
-          for (let c = 0; c < 4; c++) {
-            GTG[r][c] += row[r] * row[c];
-          }
-        }
+        for (let r = 0; r < 4; r++) for (let c = 0; c < 4; c++) GTG[r][c] += row[r] * row[c];
       }
       const Q = invert4(GTG);
       if (!Q) return { GDOP: null, PDOP: null, HDOP: null, VDOP: null };
-
       const qxx = Q[0][0], qyy = Q[1][1], qzz = Q[2][2], qtt = Q[3][3];
-      const GDOP = Math.sqrt(Math.max(qxx + qyy + qzz + qtt, 0));
-      const PDOP = Math.sqrt(Math.max(qxx + qyy + qzz, 0));
-      const HDOP = Math.sqrt(Math.max(qxx + qyy, 0));
-      const VDOP = Math.sqrt(Math.max(qzz, 0));
-      return { GDOP, PDOP, HDOP, VDOP };
+      return {
+        GDOP: Math.sqrt(Math.max(qxx + qyy + qzz + qtt, 0)),
+        PDOP: Math.sqrt(Math.max(qxx + qyy + qzz, 0)),
+        HDOP: Math.sqrt(Math.max(qxx + qyy, 0)),
+        VDOP: Math.sqrt(Math.max(qzz, 0))
+      };
     }
 
     // ====== TEC ======
@@ -932,8 +903,7 @@
 
     function getTecAt(latDeg, lonDeg) {
       if (!tecLoaded || !tecGrid.length) return null;
-      let best = null;
-      let bestDist2 = Infinity;
+      let best = null, bestDist2 = Infinity;
       for (const p of tecGrid) {
         const dLat = latDeg - p.lat;
         let dLon = lonDeg - p.lon;
@@ -956,7 +926,6 @@
 
       const tecRef = parseFloat(tecRefEl.value) || 20;
       const beta   = parseFloat(tecBetaEl.value) || 0.5;
-
       const ratio = (tec - tecRef) / tecRef;
       const factor = 1 + beta * ratio;
       const limitedFactor = Math.max(0.3, Math.min(factor, 5.0));
@@ -976,7 +945,6 @@
     // ====== DOP計算（1点） ======
     function computeDopAtLocation(latDeg, lonDeg, heightKm, time, elevMaskDeg) {
       if (!allSatellites.length) return { dops: {GDOP:null,PDOP:null,HDOP:null,VDOP:null}, visibleCount: 0 };
-
       const gmst = satellite.gstime(time);
       const observerGd = {
         latitude:  satellite.degreesToRadians(latDeg),
@@ -997,16 +965,13 @@
         if (elevDeg < elevMaskDeg) continue;
 
         visibleCount++;
-
         const az = look.azimuth;
         const el = look.elevation;
         const cosEl = Math.cos(el);
         const sinEl = Math.sin(el);
-
         const eComp = cosEl * Math.sin(az);
         const nComp = cosEl * Math.cos(az);
         const uComp = sinEl;
-
         G.push([eComp, nComp, uComp, 1.0]);
       }
 
@@ -1016,19 +981,12 @@
 
     // ====== ヒートマップ計算 ======
     function recalcDopHeatmap({ lite = false } = {}) {
-      if (!allSatellites.length) {
-        setStatus("TLEが未ロードです（TLE更新→保存、または範囲反映後に自動構築）。", true);
-        return;
-      }
-      if (!rangeStart || !rangeEnd) {
-        setStatus("時間範囲が未設定です。", true);
-        return;
-      }
+      if (!allSatellites.length) { setStatus("TLEが未ロードです。", true); return; }
+      if (!rangeStart || !rangeEnd) { setStatus("時間範囲が未設定です。", true); return; }
 
       const dopType = dopTypeSel.value;
       const elevMask = parseFloat(elevMaskEl.value) || 15;
       const obsHeightKm = parseFloat(obsHeightEl.value) || 0;
-
       const dopMin = parseFloat(dopMinEl.value) || 0.5;
       const dopMax = parseFloat(dopMaxEl.value) || 10;
       const lowC  = colorLowEl.value;
@@ -1044,7 +1002,6 @@
       setStatus(`DOP計算中... (${lite ? "drag-lite" : "full"})`, false);
       dopLayer.clearLayers();
 
-      // 東京
       const tokyoRaw = computeDopAtLocation(35.68, 139.76, obsHeightKm, time, elevMask);
       visibleTokyoLabel.textContent = String(tokyoRaw.visibleCount);
 
@@ -1070,11 +1027,7 @@
           val = applyTecToDop(val, centerLat, centerLon);
           const color = colorForDop(val, dopMin, dopMax, lowC, midC, highC);
 
-          const bounds = [
-            [lat, lon],
-            [lat + latStep, lon + lonStep]
-          ];
-
+          const bounds = [[lat, lon],[lat + latStep, lon + lonStep]];
           dopLayer.addLayer(L.rectangle(bounds, {
             stroke: false,
             fillColor: color,
@@ -1085,29 +1038,21 @@
         }
       }
 
-      setStatus(`DOP完了: ${formatUtc(time)} / 仰角≥${elevMask.toFixed(0)}° / TEC:${useTecCheckbox.checked ? "ON" : "OFF"} / ${lite ? "LITE" : "FULL"}`, false);
+      setStatus(`DOP完了: ${formatUtc(time)} / 仰角≥${elevMask.toFixed(0)}° / TLE:${tleSourceEl.value} / TEC:${useTecCheckbox.checked ? "ON" : "OFF"} / ${lite ? "LITE" : "FULL"}`, false);
     }
 
     recalcBtn.addEventListener("click", () => recalcDopHeatmap({ lite:false }));
 
-    // ====== スライダー追従（ドラッグ中もヒートマップ更新） ======
+    // ====== スライダー追従 ======
     let rafPending = false;
-    let lastDragLite = true;
-
     function scheduleRecalcOnScrub(isFinal) {
-      // isFinal: drag終了（change）時にFULL
       const wantLite = !isFinal && dragLiteEl.checked;
-      lastDragLite = wantLite;
-
       if (rafPending) return;
       rafPending = true;
       requestAnimationFrame(async () => {
         rafPending = false;
-
         const t = getSelectedTime();
-        // 選択時刻に近いTLEスナップショットで衛星セットを再構築
         await buildSatellitesForTime(t);
-
         recalcDopHeatmap({ lite: wantLite });
       });
     }
@@ -1122,11 +1067,7 @@
     });
 
     // ====== 再生 ======
-    function stopPlay() {
-      if (playTimer) clearInterval(playTimer);
-      playTimer = null;
-    }
-
+    function stopPlay() { if (playTimer) clearInterval(playTimer); playTimer = null; }
     playBtn.addEventListener("click", () => {
       if (!rangeStart) return;
       stopPlay();
@@ -1134,32 +1075,15 @@
       playTimer = setInterval(() => {
         const cur = parseInt(timeIndexEl.value || "0", 10);
         const max = parseInt(timeIndexEl.max || "0", 10);
-        if (cur >= max) {
-          stopPlay();
-          return;
-        }
+        if (cur >= max) { stopPlay(); return; }
         timeIndexEl.value = String(cur + 1);
         updateTimeLabels();
-        // 再生中はLITEで追従（最後の停止時にFULLしたければ pauseで手動再計算）
         scheduleRecalcOnScrub(false);
       }, interval);
     });
-
     pauseBtn.addEventListener("click", () => stopPlay());
-
-    toStartBtn.addEventListener("click", () => {
-      stopPlay();
-      timeIndexEl.value = "0";
-      updateTimeLabels();
-      scheduleRecalcOnScrub(true);
-    });
-
-    toEndBtn.addEventListener("click", () => {
-      stopPlay();
-      timeIndexEl.value = String(timeIndexEl.max || "0");
-      updateTimeLabels();
-      scheduleRecalcOnScrub(true);
-    });
+    toStartBtn.addEventListener("click", () => { stopPlay(); timeIndexEl.value = "0"; updateTimeLabels(); scheduleRecalcOnScrub(true); });
+    toEndBtn.addEventListener("click", () => { stopPlay(); timeIndexEl.value = String(timeIndexEl.max || "0"); updateTimeLabels(); scheduleRecalcOnScrub(true); });
 
     // ====== 範囲反映 ======
     applyRangeBtn.addEventListener("click", async () => {
@@ -1170,7 +1094,7 @@
       recalcDopHeatmap({ lite:false });
     });
 
-    // ====== クリックで単点表示（選択時刻＆採用TLEで） ======
+    // ====== クリックで単点表示 ======
     map.on("click", (e) => {
       if (!allSatellites.length) {
         L.popup().setLatLng(e.latlng).setContent("TLEがありません。").openOn(map);
@@ -1180,13 +1104,10 @@
       const obsHeightKm = parseFloat(obsHeightEl.value) || 0;
       const time = getSelectedTime();
 
-      const { dops, visibleCount } = computeDopAtLocation(
-        e.latlng.lat, e.latlng.lng, obsHeightKm, time, elevMask
-      );
-
+      const { dops, visibleCount } = computeDopAtLocation(e.latlng.lat, e.latlng.lng, obsHeightKm, time, elevMask);
       if (dops.GDOP == null) {
         L.popup().setLatLng(e.latlng)
-          .setContent(`緯度 ${e.latlng.lat.toFixed(2)}°, 経度 ${e.latlng.lng.toFixed(2)}°<br/>可視衛星: ${visibleCount}<br/>DOP: 計算不可(衛星不足)`)
+          .setContent(`緯度 ${e.latlng.lat.toFixed(2)}°, 経度 ${e.latlng.lng.toFixed(2)}°\n可視衛星: ${visibleCount}\nDOP: 計算不可(衛星不足)`)
           .openOn(map);
         return;
       }
@@ -1213,10 +1134,9 @@
       clampRangeToNowPlusMinus3days();
       applyRangeFromInputs();
 
-      // 初期：まずは最新TLEを保存（初回だけ）
+      // 初回：Browser cache を充実させたいならここ（任意）
       await refreshAndStoreTles();
 
-      // 初期時刻で構築して描画
       const t = getSelectedTime();
       await buildSatellitesForTime(t);
       recalcDopHeatmap({ lite:false });
